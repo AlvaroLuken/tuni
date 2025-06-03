@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import Accelerate
 
 class AudioManager: ObservableObject {
     private let engine = AVAudioEngine()
@@ -12,7 +13,8 @@ class AudioManager: ObservableObject {
         guard !isRunning else { return }
         let inputNode = engine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 2048, format: format) { [weak self] buffer, _ in
+        // Larger buffer improves detection of lower frequencies like bass notes
+        inputNode.installTap(onBus: 0, bufferSize: 4096, format: format) { [weak self] buffer, _ in
             self?.process(buffer: buffer)
         }
 
@@ -46,11 +48,14 @@ class AudioManager: ObservableObject {
             let frameLength = Int(buffer.frameLength)
             let sampleRate = buffer.format.sampleRate
 
+            let minLag = Int(sampleRate / 400) // search up to ~400 Hz
+            let maxLag = min(Int(sampleRate / 30), frameLength / 2)
+
             var bestLag = 0
             var maxCorr: Float = 0
 
             if frameLength > 0 {
-                for lag in 1..<(frameLength / 2) {
+                for lag in minLag..<maxLag {
                     var corr: Float = 0
                     for i in 0..<(frameLength - lag) {
                         corr += channelData[i] * channelData[i + lag]

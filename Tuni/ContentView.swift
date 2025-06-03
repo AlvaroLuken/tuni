@@ -4,13 +4,15 @@ import AVFoundation
 struct ContentView: View {
     @StateObject private var audioManager = AudioManager()
     @Environment(\.scenePhase) private var scenePhase
-    @State private var instrument: Instrument = .guitar
+    // Start with no instrument selected so the user must choose
+    @State private var instrument: Instrument?
 
     var body: some View {
         VStack(spacing: 20) {
             Picker("Instrument", selection: $instrument) {
                 ForEach(Instrument.allCases) { ins in
                     Text(ins.rawValue.capitalized)
+                        .tag(Optional(ins))
                 }
             }
             .pickerStyle(.segmented)
@@ -30,14 +32,18 @@ struct ContentView: View {
                     Text("Detecting…")
                 }
 
-                ForEach(instrument.strings.sorted(by: { $0.key < $1.key }), id: \.key) { note, target in
-                    TuningSlider(note: note, target: target, detected: audioManager.frequency)
+                if let instrument {
+                    ForEach(instrument.strings.sorted(by: { $0.key < $1.key }), id: \.key) { note, target in
+                        TuningSlider(note: note, target: target, detected: audioManager.frequency)
+                    }
                 }
             } else {
-                Button("Start Tuning") {
-                    audioManager.start()
+                if instrument != nil {
+                    Button("Start Tuning") {
+                        audioManager.start()
+                    }
+                    .padding()
                 }
-                .padding()
             }
         }
         .onChange(of: scenePhase) { phase in
