@@ -8,8 +8,18 @@ struct TuningSlider: View {
     let isTuned: Bool
 
     private var range: ClosedRange<Double> {
-        let lower = max(0, target * 0.65)
-        return lower...target
+        let span = target * 0.3
+        let lower = max(1, target - span)
+        let upper = target + span
+        return lower...upper
+    }
+
+    private var tint: Color {
+        guard let detected else { return .gray }
+        let diff = abs(detected - target)
+        if diff < 1 { return .green }
+        if diff < 5 { return .yellow }
+        return .red
     }
 
     var body: some View {
@@ -27,6 +37,16 @@ struct TuningSlider: View {
             }
             Slider(value: .constant(detected ?? target), in: range)
                 .disabled(true)
+                .tint(tint)
+                .overlay(
+                    GeometryReader { geo in
+                        let width = geo.size.width
+                        Rectangle()
+                            .fill(Color.green.opacity(0.3))
+                            .frame(width: 4)
+                            .position(x: width / 2, y: geo.size.height / 2)
+                    }
+                )
             if let detected {
                 Text(String(format: "Detected %.2f Hz", detected))
                     .font(.caption2)
