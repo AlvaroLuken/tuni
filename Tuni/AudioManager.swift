@@ -7,7 +7,18 @@ class AudioManager: ObservableObject {
     @Published private(set) var isRunning = false
     @Published var frequency: Double?
 
+    /// Expected frequency of the current string being tuned. Narrowing the
+    /// search range around this value helps reduce noise induced errors.
+    private var targetFrequency: Double?
+
     private let processingQueue = DispatchQueue(label: "AudioProcessingQueue")
+
+    /// Update the expected frequency for pitch detection.
+    func setTargetFrequency(_ freq: Double?) {
+        processingQueue.async { [weak self] in
+            self?.targetFrequency = freq
+        }
+    }
 
     func start() {
         guard !isRunning else { return }
@@ -43,16 +54,33 @@ class AudioManager: ObservableObject {
     }
 
     private func process(buffer: AVAudioPCMBuffer) {
-        processingQueue.async {
+        processingQueue.async { [weak self] in
+            guard let self else { return }
             guard let channelData = buffer.floatChannelData?[0] else { return }
             let frameLength = Int(buffer.frameLength)
             let sampleRate = buffer.format.sampleRate
 
-            let minLag = Int(sampleRate / 400) // search up to ~400 Hz
-            let maxLag = min(Int(sampleRate / 30), frameLength / 2)
+            // Skip processing if the signal amplitude is too low.
+            var rms: Float = 0
+            vDSP_rmsqv(channelData, 1, &rms, vDSP_Length(frameLength))
+            if rms < 0.02 { return }
+
+            // Determine the lag search range. If a target frequency is set, only
+            // search near that value to avoid spurious detections.
+            var minLag = Int(sampleRate / 400)
+            var maxLag = min(Int(sampleRate / 30), frameLength / 2)
+            if let target = self.targetFrequency {
+                let lowerFreq = max(1, target * 0.9)
+                let upperFreq = target * 1.1
+                minLag = Int(sampleRate / upperFreq)
+                maxLag = min(Int(sampleRate / lowerFreq), frameLength / 2)
+            }
 
             var bestLag = 0
             var maxCorr: Float = 0
+
+            var energy: Float = 0
+            vDSP_dotpr(channelData, 1, channelData, 1, &energy, vDSP_Length(frameLength))
 
             if frameLength > 0 {
                 for lag in minLag..<maxLag {
@@ -60,14 +88,15 @@ class AudioManager: ObservableObject {
                     for i in 0..<(frameLength - lag) {
                         corr += channelData[i] * channelData[i + lag]
                     }
-                    if corr > maxCorr {
-                        maxCorr = corr
+                    let normalized = corr / (energy + 1e-9)
+                    if normalized > maxCorr {
+                        maxCorr = normalized
                         bestLag = lag
                     }
                 }
             }
 
-            guard bestLag > 0 else { return }
+            guard bestLag > 0, maxCorr > 0.2 else { return }
             let freq = sampleRate / Double(bestLag)
             DispatchQueue.main.async { [weak self] in
                 self?.frequency = freq

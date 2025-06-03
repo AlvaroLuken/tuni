@@ -25,6 +25,7 @@ struct ContentView: View {
 
                 Button("Stop Tuning") {
                     audioManager.stop()
+                    audioManager.setTargetFrequency(nil)
                 }
                 .padding()
 
@@ -50,6 +51,9 @@ struct ContentView: View {
                 if instrument != nil {
                     Button("Start Tuning") {
                         audioManager.start()
+                        if let instrument {
+                            audioManager.setTargetFrequency(instrument.strings[currentStringIndex].target)
+                        }
                         currentStringIndex = 0
                         tunedStrings = []
                     }
@@ -65,6 +69,11 @@ struct ContentView: View {
         .onChange(of: instrument) { _ in
             currentStringIndex = 0
             tunedStrings = []
+            if let instrument {
+                audioManager.setTargetFrequency(instrument.strings[currentStringIndex].target)
+            } else {
+                audioManager.setTargetFrequency(nil)
+            }
         }
         .onChange(of: audioManager.frequency) { freq in
             guard let instrument, let freq else { return }
@@ -73,6 +82,7 @@ struct ContentView: View {
                 tunedStrings.insert(currentStringIndex)
                 if currentStringIndex < instrument.strings.count - 1 {
                     currentStringIndex += 1
+                    audioManager.setTargetFrequency(instrument.strings[currentStringIndex].target)
                 }
             }
         }
