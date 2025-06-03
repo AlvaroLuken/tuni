@@ -1,21 +1,27 @@
-//
-//  ContentView.swift
-//  Tuni
-//
-//  Created by Alvaro Luken on 5/30/25.
-//
-
 import SwiftUI
+import AVFoundation
 
 struct ContentView: View {
+    @StateObject private var audioManager = AudioManager()
+    @Environment(\.scenePhase) private var scenePhase
+
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        VStack(spacing: 20) {
+            Button("Start Tuning") {
+                audioManager.start()
+            }
+            .padding()
+
+            Button("Stop") {
+                audioManager.stop()
+            }
+            .padding()
         }
-        .padding()
+        .onChange(of: scenePhase) { phase in
+            if phase != .active {
+                audioManager.stop()
+            }
+        }
     }
 }
 
